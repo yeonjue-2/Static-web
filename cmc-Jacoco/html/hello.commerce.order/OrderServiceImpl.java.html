@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OrderServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">commerce</a> &gt; <a href="index.source.html" class="el_package">hello.commerce.order</a> &gt; <span class="el_source">OrderServiceImpl.java</span></div><h1>OrderServiceImpl.java</h1><pre class="source lang-java linenums">package hello.commerce.order;
+
+import hello.commerce.common.exception.BusinessException;
+import hello.commerce.common.exception.ErrorCode;
+import hello.commerce.order.dto.OrderRequestV1;
+import hello.commerce.order.model.Order;
+import hello.commerce.order.model.OrderStatus;
+import hello.commerce.product.ProductReader;
+import hello.commerce.product.model.Product;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+
+@Service
+@RequiredArgsConstructor
+public class OrderServiceImpl implements OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ProductReader productReader;
+
+    @Transactional
+    @Override
+    public Order createOrder(OrderRequestV1 orderRequest) {
+        // 1. 유효성 검사 - product는 영속상태
+<span class="fc" id="L28">        Product product = validateOrderCondition(orderRequest);</span>
+
+        // 2. 주문 생성 및 저장
+<span class="fc" id="L31">        int totalAmount = product.getAmount() * orderRequest.getQuantity();</span>
+<span class="fc" id="L32">        Order order = createOrderEntity(orderRequest, product, totalAmount);</span>
+<span class="fc" id="L33">        orderRepository.save(order);</span>
+
+        // 3. 재고 차감 - 영속상태인 product에 변경감지가 되어 커밋 시점에 JPA가 자동으로 update 쿼리 실행
+<span class="fc" id="L36">        product.decreaseStock(orderRequest.getQuantity());</span>
+
+        // 4. 응답 반환
+<span class="fc" id="L39">        return orderRepository.findById(order.getId())</span>
+<span class="fc" id="L40">                .orElseThrow(() -&gt; new BusinessException(ErrorCode.NOT_FOUND_ORDER));</span>
+    }
+
+    @Override
+    public Page&lt;Order&gt; getOrders(Pageable pageable, OrderStatus orderStatus) {
+<span class="fc" id="L45">        return orderRepository.findAllByOrderStatus(pageable, orderStatus);</span>
+    }
+
+    @Override
+    public Page&lt;Order&gt; getOrders(Pageable pageable) {
+<span class="fc" id="L50">        return orderRepository.findAll(pageable);</span>
+    }
+
+    @Override
+    public Order getOrderById(Long orderId) {
+<span class="fc" id="L55">        return orderRepository.findById(orderId)</span>
+<span class="fc" id="L56">                .orElseThrow(() -&gt; new BusinessException(ErrorCode.NOT_FOUND_ORDER));</span>
+    }
+
+
+    private static Order createOrderEntity(OrderRequestV1 orderRequest, Product product, int totalAmount) {
+<span class="fc" id="L61">        return Order.builder()</span>
+<span class="fc" id="L62">                .product(product)</span>
+<span class="fc" id="L63">                .userId(orderRequest.getUserId())</span>
+<span class="fc" id="L64">                .quantity(orderRequest.getQuantity())</span>
+<span class="fc" id="L65">                .totalAmount(totalAmount)</span>
+<span class="fc" id="L66">                .orderStatus(OrderStatus.INITIAL)</span>
+<span class="fc" id="L67">                .build();</span>
+    }
+
+    private Product validateOrderCondition(OrderRequestV1 orderRequest) {
+        // 수량 유효성
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        if (orderRequest.getQuantity() &lt;= 0) {</span>
+<span class="fc" id="L73">            throw new BusinessException(ErrorCode.INVALID_ORDER_QUANTITY);</span>
+        }
+
+        // product는 영속상태가 됨
+<span class="fc" id="L77">        Product product = productReader.findByIdForUpdate(orderRequest.getProductId());</span>
+
+        // 재고 확인
+<span class="fc bfc" id="L80" title="All 2 branches covered.">        if (product.getStock() &lt; orderRequest.getQuantity()) {</span>
+<span class="fc" id="L81">            throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK);</span>
+        }
+<span class="fc" id="L83">        return product;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>
